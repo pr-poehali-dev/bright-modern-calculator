@@ -28,16 +28,25 @@ const COLOR_SCHEMES: Record<ColorScheme, { a: string; b: string; c: string; glow
 
 export default function Index() {
   const [tab, setTab] = useState<Tab>("calc");
-  const [theme, setTheme] = useState<Theme>("dark");
-  const [colorScheme, setColorScheme] = useState<ColorScheme>("purple");
+  const [theme, setTheme] = useState<Theme>(() =>
+    (localStorage.getItem("calc_theme") as Theme) || "dark"
+  );
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(() =>
+    (localStorage.getItem("calc_color") as ColorScheme) || "purple"
+  );
   const [expression, setExpression] = useState("");
   const [display, setDisplay] = useState("0");
   const [justCalculated, setJustCalculated] = useState(false);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem("calc_history") || "[]"); } catch { return []; }
+  });
   const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
   const [copied, setCopied] = useState(false);
-  const [favorites, setFavorites] = useState<HistoryItem[]>([]);
+  const [favorites, setFavorites] = useState<HistoryItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem("calc_favorites") || "[]"); } catch { return []; }
+  });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 480);
 
   // Converter state
   const [convType, setConvType] = useState<"length" | "weight" | "temp" | "currency">("currency");
@@ -73,6 +82,19 @@ export default function Index() {
   const audioCtx = useRef<AudioContext | null>(null);
   const cs = COLOR_SCHEMES[colorScheme];
   const isDark = theme === "dark";
+
+  // Persist settings & data
+  useEffect(() => { localStorage.setItem("calc_history", JSON.stringify(history)); }, [history]);
+  useEffect(() => { localStorage.setItem("calc_favorites", JSON.stringify(favorites)); }, [favorites]);
+  useEffect(() => { localStorage.setItem("calc_theme", theme); }, [theme]);
+  useEffect(() => { localStorage.setItem("calc_color", colorScheme); }, [colorScheme]);
+
+  // Responsive
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 480);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const playClick = useCallback(() => {
     try {
@@ -352,17 +374,19 @@ export default function Index() {
     const isEq = v === "=";
     const isClear = v === "C";
     const isSci = ["sin(","cos(","tan(","log(","ln(","√(","x²","x³","π","e","(",")","%"].includes(v);
+    const btnH = isMobile ? "64px" : "56px";
     const base: React.CSSProperties = {
       cursor: "pointer", border: "none", outline: "none",
       fontFamily: "'Montserrat', sans-serif", fontWeight: 600,
-      borderRadius: "14px", height: "56px", width: "100%",
+      borderRadius: isMobile ? "16px" : "14px", height: btnH, width: "100%",
       transition: "all 0.15s ease", userSelect: "none",
-      fontSize: isSci ? "0.78rem" : "1rem",
+      fontSize: isSci ? (isMobile ? "0.82rem" : "0.78rem") : (isMobile ? "1.1rem" : "1rem"),
+      WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
     };
-    if (isEq) return { ...base, background: `linear-gradient(135deg, ${cs.a}, ${cs.b})`, color: "#fff", boxShadow: `0 4px 20px ${cs.glow}`, fontSize: "1.2rem" };
-    if (isClear) return { ...base, background: "rgba(239,68,68,0.2)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", fontSize: "1rem" };
-    if (v === "⌫") return { ...base, background: "rgba(239,68,68,0.12)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.2)", fontSize: "1.1rem" };
-    if (isOp) return { ...base, background: cs.btn, color: cs.a, border: `1px solid ${cs.a}55`, fontSize: "1.2rem" };
+    if (isEq) return { ...base, background: `linear-gradient(135deg, ${cs.a}, ${cs.b})`, color: "#fff", boxShadow: `0 4px 20px ${cs.glow}`, fontSize: isMobile ? "1.3rem" : "1.2rem" };
+    if (isClear) return { ...base, background: "rgba(239,68,68,0.2)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" };
+    if (v === "⌫") return { ...base, background: "rgba(239,68,68,0.12)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.2)", fontSize: isMobile ? "1.2rem" : "1.1rem" };
+    if (isOp) return { ...base, background: cs.btn, color: cs.a, border: `1px solid ${cs.a}55`, fontSize: isMobile ? "1.3rem" : "1.2rem" };
     if (isSci) return { ...base, background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: isDark ? "#c4b5fd" : "#6d28d9", border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(109,40,217,0.2)" };
     return { ...base, background: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: textColor, border: isDark ? "1px solid rgba(255,255,255,0.09)" : "1px solid rgba(0,0,0,0.09)" };
   };
@@ -396,14 +420,16 @@ export default function Index() {
 
   return (
     <div style={{
-      minHeight: "100vh",
+      minHeight: "100vh", minHeight: "100dvh",
       background: isDark
         ? "linear-gradient(135deg, #0b0718 0%, #160825 30%, #0d1640 65%, #140820 100%)"
         : "linear-gradient(135deg, #ede9fe 0%, #fce7f3 45%, #ffedd5 100%)",
       fontFamily: "'Montserrat', sans-serif",
       display: "flex", flexDirection: "column", alignItems: "center",
-      padding: "20px 16px 60px", position: "relative", overflow: "hidden",
-    }}>
+      padding: isMobile ? "12px 10px env(safe-area-inset-bottom, 20px)" : "20px 16px 60px",
+      paddingTop: isMobile ? "max(12px, env(safe-area-inset-top, 12px))" : "20px",
+      position: "relative", overflow: "hidden",
+    } as React.CSSProperties}>
 
       {/* Background orbs */}
       {[
@@ -433,40 +459,44 @@ export default function Index() {
       ))}
 
       {/* Top controls */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, zIndex: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", background: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", borderRadius: "20px", padding: "6px 12px" }}>
+      <div style={{ display: "flex", gap: isMobile ? 6 : 8, marginBottom: isMobile ? 10 : 18, zIndex: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: isMobile ? 8 : 6, alignItems: "center", background: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", borderRadius: "20px", padding: isMobile ? "7px 14px" : "6px 12px" }}>
           {(Object.keys(COLOR_SCHEMES) as ColorScheme[]).map(sc => (
             <button key={sc} onClick={() => setColorScheme(sc)} title={sc} style={{
-              width: 22, height: 22, borderRadius: "50%",
+              width: isMobile ? 26 : 22, height: isMobile ? 26 : 22, borderRadius: "50%",
               border: colorScheme === sc ? `2px solid ${isDark ? "#fff" : "#1e1b4b"}` : "2px solid transparent",
               background: `linear-gradient(135deg, ${COLOR_SCHEMES[sc].a}, ${COLOR_SCHEMES[sc].b})`,
               cursor: "pointer", transition: "all 0.2s", padding: 0,
+              WebkitTapHighlightColor: "transparent",
             }} />
           ))}
         </div>
         <button onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} style={{
           background: isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.08)",
           border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(0,0,0,0.12)",
-          borderRadius: "20px", padding: "6px 14px", cursor: "pointer",
-          color: textColor, fontSize: "0.8rem", fontFamily: "'Montserrat', sans-serif", fontWeight: 600,
+          borderRadius: "20px", padding: isMobile ? "7px 14px" : "6px 14px", cursor: "pointer",
+          color: textColor, fontSize: isMobile ? "0.85rem" : "0.8rem", fontFamily: "'Montserrat', sans-serif", fontWeight: 600,
+          WebkitTapHighlightColor: "transparent",
         }}>
-          {isDark ? "☀️ Светлая" : "🌙 Тёмная"}
+          {isDark ? "☀️" : "🌙"}{!isMobile && (isDark ? " Светлая" : " Тёмная")}
         </button>
-        <button onClick={toggleFullscreen} style={{
-          background: isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.08)",
-          border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(0,0,0,0.12)",
-          borderRadius: "20px", padding: "6px 14px", cursor: "pointer",
-          color: textColor, fontSize: "0.8rem", fontFamily: "'Montserrat', sans-serif", fontWeight: 600,
-        }}>
-          {isFullscreen ? "⊡ Выйти" : "⛶ На весь экран"}
-        </button>
+        {!isMobile && (
+          <button onClick={toggleFullscreen} style={{
+            background: isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.08)",
+            border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(0,0,0,0.12)",
+            borderRadius: "20px", padding: "6px 14px", cursor: "pointer",
+            color: textColor, fontSize: "0.8rem", fontFamily: "'Montserrat', sans-serif", fontWeight: 600,
+          }}>
+            {isFullscreen ? "⊡ Выйти" : "⛶ На весь экран"}
+          </button>
+        )}
       </div>
 
       {/* Main card */}
       <div style={{
         background: glassBg, backdropFilter: "blur(28px)", WebkitBackdropFilter: "blur(28px)",
-        border: glassBorder, borderRadius: "28px",
-        width: "100%", maxWidth: 430,
+        border: glassBorder, borderRadius: isMobile ? "24px" : "28px",
+        width: "100%", maxWidth: isMobile ? "100%" : 430,
         boxShadow: isDark
           ? `0 32px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.04), 0 0 80px ${cs.glow}`
           : `0 24px 64px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.7), 0 0 40px ${cs.glow}`,
@@ -475,28 +505,32 @@ export default function Index() {
 
         {/* Tabs */}
         <div style={{
-          display: "flex", overflowX: "auto", padding: "14px 14px 0", gap: 5,
-          scrollbarWidth: "none",
-        }}>
+          display: "flex", overflowX: "auto",
+          padding: isMobile ? "10px 10px 0" : "14px 14px 0", gap: isMobile ? 4 : 5,
+          scrollbarWidth: "none", WebkitOverflowScrolling: "touch",
+        } as React.CSSProperties}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => { setTab(t.id); playClick(); }} style={{
               flexShrink: 0,
               background: tab === t.id
                 ? `linear-gradient(135deg, ${cs.a}, ${cs.b})`
                 : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
-              border: "none", borderRadius: "10px", padding: "7px 12px",
+              border: "none", borderRadius: "10px",
+              padding: isMobile ? "8px 10px" : "7px 12px",
               color: tab === t.id ? "#fff" : textColor, cursor: "pointer",
-              fontFamily: "'Montserrat', sans-serif", fontWeight: 700, fontSize: "0.7rem",
+              fontFamily: "'Montserrat', sans-serif", fontWeight: 700,
+              fontSize: isMobile ? "0.72rem" : "0.7rem",
               transition: "all 0.2s", letterSpacing: "0.01em",
               boxShadow: tab === t.id ? `0 4px 14px ${cs.glow}` : "none",
-              whiteSpace: "nowrap",
+              whiteSpace: "nowrap", WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
             }}>
               {t.icon} {t.label}
             </button>
           ))}
         </div>
 
-        <div style={{ padding: "14px" }}>
+        <div style={{ padding: isMobile ? "10px" : "14px" }}>
 
           {/* ══ CALC ══ */}
           {tab === "calc" && (
@@ -549,28 +583,32 @@ export default function Index() {
               </div>
 
               {/* Button grid */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: isMobile ? 6 : 7 }}>
                 {displayBtns.map((v, i) => (
                   <button key={i} onClick={() => press(v)}
                     style={calcBtnStyle(v)}
-                    onMouseEnter={e => {
+                    onMouseEnter={!isMobile ? e => {
                       (e.currentTarget as HTMLElement).style.transform = "translateY(-2px) scale(1.04)";
                       (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 24px ${cs.glow}`;
-                    }}
-                    onMouseLeave={e => {
+                    } : undefined}
+                    onMouseLeave={!isMobile ? e => {
                       (e.currentTarget as HTMLElement).style.transform = "";
                       (e.currentTarget as HTMLElement).style.boxShadow = v === "=" ? `0 4px 20px ${cs.glow}` : "";
-                    }}
+                    } : undefined}
                     onMouseDown={e => { (e.currentTarget as HTMLElement).style.transform = "scale(0.93)"; }}
-                    onMouseUp={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px) scale(1.04)"; }}
+                    onMouseUp={e => { (e.currentTarget as HTMLElement).style.transform = isMobile ? "scale(1)" : "translateY(-2px) scale(1.04)"; }}
+                    onTouchStart={e => { (e.currentTarget as HTMLElement).style.transform = "scale(0.93)"; (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 16px ${cs.glow}`; }}
+                    onTouchEnd={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1)"; (e.currentTarget as HTMLElement).style.boxShadow = v === "=" ? `0 4px 20px ${cs.glow}` : ""; }}
                   >
                     {v}
                   </button>
                 ))}
               </div>
-              <p style={{ color: subText, fontSize: "0.65rem", textAlign: "center", marginTop: 10, letterSpacing: "0.02em" }}>
-                Клавиатура поддерживается · Esc — сброс · Enter — равно
-              </p>
+              {!isMobile && (
+                <p style={{ color: subText, fontSize: "0.65rem", textAlign: "center", marginTop: 10, letterSpacing: "0.02em" }}>
+                  Клавиатура поддерживается · Esc — сброс · Enter — равно
+                </p>
+              )}
             </div>
           )}
 
@@ -888,9 +926,15 @@ export default function Index() {
         select { appearance: none; -webkit-appearance: none; }
         select option { background: ${isDark ? "#1a1030" : "#f5f3ff"}; color: ${isDark ? "#f1f0ff" : "#1e1b4b"}; }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+        input[type=date] { color-scheme: ${isDark ? "dark" : "light"}; }
+        input[type=date]::-webkit-calendar-picker-indicator { filter: ${isDark ? "invert(1) opacity(0.5)" : "opacity(0.5)"}; cursor: pointer; }
         ::-webkit-scrollbar { width: 3px; height: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: ${cs.a}55; border-radius: 3px; }
+        * { -webkit-tap-highlight-color: transparent; }
+        @media (max-width: 480px) {
+          body { overscroll-behavior: none; }
+        }
       `}</style>
     </div>
   );
