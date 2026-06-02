@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-type Tab = "calc" | "converter" | "percent" | "credit" | "history";
+type Tab = "calc" | "converter" | "percent" | "credit" | "bmi" | "dates" | "history";
 type Theme = "dark" | "light";
 type ColorScheme = "purple" | "cyan" | "green" | "orange";
 
@@ -57,6 +57,18 @@ export default function Index() {
   const [crRate, setCrRate] = useState("");
   const [crMonths, setCrMonths] = useState("");
   const [crResult, setCrResult] = useState<{ monthly: string; total: string; overpay: string } | null>(null);
+
+  // BMI state
+  const [bmiWeight, setBmiWeight] = useState("");
+  const [bmiHeight, setBmiHeight] = useState("");
+  const [bmiAge, setBmiAge] = useState("");
+  const [bmiGender, setBmiGender] = useState<"m" | "f">("m");
+  const [bmiResult, setBmiResult] = useState<{ bmi: string; category: string; color: string; tip: string } | null>(null);
+
+  // Dates state
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [datesResult, setDatesResult] = useState<{ days: number; weeks: number; months: number; years: number; workdays: number } | null>(null);
 
   const audioCtx = useRef<AudioContext | null>(null);
   const cs = COLOR_SCHEMES[colorScheme];
@@ -271,6 +283,43 @@ export default function Index() {
     setCrResult({ monthly: monthly.toFixed(2), total: total.toFixed(2), overpay: (total - S).toFixed(2) });
   };
 
+  // BMI
+  const calcBmi = () => {
+    const w = parseFloat(bmiWeight), h = parseFloat(bmiHeight) / 100;
+    if (isNaN(w) || isNaN(h) || h <= 0) { setBmiResult(null); return; }
+    const bmi = w / (h * h);
+    let category = "", color = "", tip = "";
+    if (bmi < 16)        { category = "Выраженный дефицит"; color = "#60a5fa"; tip = "Срочно обратитесь к врачу"; }
+    else if (bmi < 18.5) { category = "Недостаточный вес";  color = "#93c5fd"; tip = "Стоит увеличить калорийность рациона"; }
+    else if (bmi < 25)   { category = "Норма ✓";            color = "#34d399"; tip = "Отличный результат, так держать!"; }
+    else if (bmi < 30)   { category = "Избыточный вес";     color = "#fbbf24"; tip = "Рекомендуется умеренная физическая активность"; }
+    else if (bmi < 35)   { category = "Ожирение I степени"; color = "#f97316"; tip = "Проконсультируйтесь с врачом"; }
+    else if (bmi < 40)   { category = "Ожирение II степени";color = "#ef4444"; tip = "Необходима консультация специалиста"; }
+    else                 { category = "Ожирение III степени";color = "#dc2626"; tip = "Срочно обратитесь к врачу"; }
+    const age = parseInt(bmiAge);
+    let norm = "18.5 – 24.9";
+    if (!isNaN(age) && age >= 65) norm = "23 – 27";
+    else if (!isNaN(age) && age >= 45) norm = "22 – 27";
+    setBmiResult({ bmi: bmi.toFixed(1), category, color, tip: tip + (norm ? ` · Норма для вашего возраста: ${norm}` : "") });
+  };
+
+  // Dates
+  const calcDates = () => {
+    if (!dateFrom || !dateTo) { setDatesResult(null); return; }
+    const d1 = new Date(dateFrom), d2 = new Date(dateTo);
+    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) { setDatesResult(null); return; }
+    const [start, end] = d1 <= d2 ? [d1, d2] : [d2, d1];
+    const diffMs = end.getTime() - start.getTime();
+    const days = Math.round(diffMs / 86400000);
+    const weeks = Math.floor(days / 7);
+    const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+    const years = end.getFullYear() - start.getFullYear() - (end < new Date(start.getFullYear() + (end.getFullYear() - start.getFullYear()), start.getMonth(), start.getDate()) ? 1 : 0);
+    let workdays = 0;
+    const cur = new Date(start);
+    while (cur <= end) { const d = cur.getDay(); if (d !== 0 && d !== 6) workdays++; cur.setDate(cur.getDate() + 1); }
+    setDatesResult({ days, weeks, months: Math.abs(months), years: Math.abs(years), workdays });
+  };
+
   // Styles
   const glassBg = isDark ? "rgba(15,10,35,0.78)" : "rgba(255,255,255,0.68)";
   const glassBorder = isDark ? "1px solid rgba(255,255,255,0.11)" : "1px solid rgba(255,255,255,0.85)";
@@ -323,6 +372,8 @@ export default function Index() {
     { id: "converter" as Tab, label: "Конвертер", icon: "🔄" },
     { id: "percent" as Tab, label: "Проценты", icon: "%" },
     { id: "credit" as Tab, label: "Кредит", icon: "🏦" },
+    { id: "bmi" as Tab, label: "ИМТ", icon: "⚖️" },
+    { id: "dates" as Tab, label: "Даты", icon: "📅" },
     { id: "history" as Tab, label: "История", icon: "📋" },
   ];
 
@@ -645,6 +696,135 @@ export default function Index() {
                     <div key={i} style={resultCard}>
                       <div style={{ color: subText, fontSize: "0.72rem", marginBottom: 4 }}>{r.label}</div>
                       <div style={{ color: textColor, fontWeight: 800, fontSize: "1.3rem", fontFamily: "'JetBrains Mono', monospace" }}>{r.value}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ══ BMI ══ */}
+          {tab === "bmi" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ color: textColor, fontWeight: 800, fontSize: "1rem" }}>⚖️ Индекс массы тела (ИМТ)</div>
+
+              {/* Gender toggle */}
+              <div style={{ display: "flex", gap: 8 }}>
+                {([["m", "👨 Мужчина"], ["f", "👩 Женщина"]] as const).map(([g, label]) => (
+                  <button key={g} onClick={() => { setBmiGender(g); playClick(); }} style={{
+                    flex: 1,
+                    background: bmiGender === g ? `linear-gradient(135deg, ${cs.a}, ${cs.b})` : isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                    border: "none", borderRadius: "10px", padding: "10px", cursor: "pointer",
+                    color: bmiGender === g ? "#fff" : textColor, fontFamily: "'Montserrat', sans-serif",
+                    fontWeight: 700, fontSize: "0.82rem", transition: "all 0.2s",
+                  }}>{label}</button>
+                ))}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <div style={{ color: subText, fontSize: "0.75rem", marginBottom: 6 }}>Вес (кг)</div>
+                  <input value={bmiWeight} onChange={e => setBmiWeight(e.target.value)} placeholder="70" style={inputStyle} type="number" />
+                </div>
+                <div>
+                  <div style={{ color: subText, fontSize: "0.75rem", marginBottom: 6 }}>Рост (см)</div>
+                  <input value={bmiHeight} onChange={e => setBmiHeight(e.target.value)} placeholder="175" style={inputStyle} type="number" />
+                </div>
+              </div>
+              <div>
+                <div style={{ color: subText, fontSize: "0.75rem", marginBottom: 6 }}>Возраст (лет, необязательно)</div>
+                <input value={bmiAge} onChange={e => setBmiAge(e.target.value)} placeholder="30" style={inputStyle} type="number" />
+              </div>
+              <button onClick={calcBmi} style={primaryBtn}>Рассчитать ИМТ</button>
+
+              {bmiResult && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {/* Big BMI number */}
+                  <div style={{
+                    ...resultCard,
+                    textAlign: "center", padding: "20px 16px",
+                    background: `linear-gradient(135deg, ${bmiResult.color}22, ${bmiResult.color}11)`,
+                    border: `1px solid ${bmiResult.color}55`,
+                  }}>
+                    <div style={{ color: subText, fontSize: "0.75rem", marginBottom: 4 }}>Ваш ИМТ</div>
+                    <div style={{ color: bmiResult.color, fontWeight: 900, fontSize: "3rem", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1, textShadow: `0 0 30px ${bmiResult.color}88` }}>
+                      {bmiResult.bmi}
+                    </div>
+                    <div style={{ color: bmiResult.color, fontWeight: 700, fontSize: "1rem", marginTop: 6 }}>{bmiResult.category}</div>
+                  </div>
+                  {/* Tip */}
+                  <div style={{ ...resultCard, fontSize: "0.82rem", color: subText, lineHeight: 1.5 }}>
+                    💡 {bmiResult.tip}
+                  </div>
+                  {/* Scale */}
+                  <div style={{ ...resultCard }}>
+                    <div style={{ color: subText, fontSize: "0.7rem", marginBottom: 8 }}>Шкала ИМТ</div>
+                    {[
+                      { label: "< 18.5", name: "Дефицит веса", color: "#60a5fa" },
+                      { label: "18.5–24.9", name: "Норма", color: "#34d399" },
+                      { label: "25–29.9", name: "Избыточный вес", color: "#fbbf24" },
+                      { label: "30–34.9", name: "Ожирение I", color: "#f97316" },
+                      { label: "≥ 35", name: "Ожирение II–III", color: "#ef4444" },
+                    ].map((s, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+                        <span style={{ color: s.color, fontWeight: 600, fontSize: "0.72rem", width: 70 }}>{s.label}</span>
+                        <span style={{ color: subText, fontSize: "0.72rem" }}>{s.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ══ DATES ══ */}
+          {tab === "dates" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ color: textColor, fontWeight: 800, fontSize: "1rem" }}>📅 Разница между датами</div>
+              <div>
+                <div style={{ color: subText, fontSize: "0.75rem", marginBottom: 6 }}>Дата начала</div>
+                <input value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle} type="date" />
+              </div>
+              <div>
+                <div style={{ color: subText, fontSize: "0.75rem", marginBottom: 6 }}>Дата окончания</div>
+                <input value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle} type="date" />
+              </div>
+              {/* Quick presets */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {[
+                  { label: "Сегодня", days: 0 },
+                  { label: "+1 год", days: 365 },
+                  { label: "+6 мес", days: 182 },
+                  { label: "+100 дней", days: 100 },
+                ].map(p => (
+                  <button key={p.label} onClick={() => {
+                    const now = new Date();
+                    const end = new Date(now.getTime() + p.days * 86400000);
+                    setDateFrom(now.toISOString().split("T")[0]);
+                    setDateTo(end.toISOString().split("T")[0]);
+                    playClick();
+                  }} style={{
+                    background: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                    border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(0,0,0,0.1)",
+                    borderRadius: "8px", padding: "5px 10px", cursor: "pointer",
+                    color: textColor, fontFamily: "'Montserrat', sans-serif", fontWeight: 600, fontSize: "0.72rem",
+                  }}>{p.label}</button>
+                ))}
+              </div>
+              <button onClick={calcDates} style={primaryBtn}>Вычислить разницу</button>
+              {datesResult && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {[
+                    { label: "📆 Всего дней", value: datesResult.days.toLocaleString("ru-RU") },
+                    { label: "📅 Недель", value: datesResult.weeks.toLocaleString("ru-RU") },
+                    { label: "🗓️ Месяцев", value: datesResult.months.toLocaleString("ru-RU") },
+                    { label: "🎂 Лет", value: datesResult.years.toLocaleString("ru-RU") },
+                    { label: "💼 Рабочих дней", value: datesResult.workdays.toLocaleString("ru-RU"), full: true },
+                  ].map((r, i) => (
+                    <div key={i} style={{ ...resultCard, ...(r.full ? { gridColumn: "1 / -1" } : {}) }}>
+                      <div style={{ color: subText, fontSize: "0.7rem", marginBottom: 3 }}>{r.label}</div>
+                      <div style={{ color: textColor, fontWeight: 800, fontSize: "1.5rem", fontFamily: "'JetBrains Mono', monospace" }}>{r.value}</div>
                     </div>
                   ))}
                 </div>
